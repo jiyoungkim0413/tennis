@@ -134,6 +134,21 @@
   .rvb.on{background:var(--accent);color:#fff}
   .rvb.no.on{background:#8a918c;border-color:#8a918c;color:#fff}
   .lowtag{font-size:11px;font-weight:700;color:#fff;background:#e07b24;border-radius:10px;padding:2px 8px}
+  .calhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .calhead b{font-size:16px}
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .cw{text-align:center;font-size:11px;color:var(--sub);padding:2px 0}
+  .cd{min-height:44px;border-radius:9px;display:flex;flex-direction:column;align-items:center;padding-top:4px;gap:2px;font-size:13px}
+  .cd.has{background:var(--accent2);cursor:pointer}
+  .cd.today{box-shadow:inset 0 0 0 2px var(--accent)}
+  .cd.pick{background:var(--accent);color:#fff}
+  .cd.pick .cm{box-shadow:0 0 0 1px #fff}
+  .sun .dn,.cw.sun{color:#d2453b}.sat .dn,.cw.sat{color:#2f5fb3}
+  .cd.pick .dn{color:#fff}
+  .cm{font-size:10px;font-weight:700;border-radius:8px;padding:0 5px;line-height:15px}
+  .cm.ok{background:#1d8455;color:#fff}.cm.due{background:#d2453b;color:#fff}.cm.vote{background:#fff;color:var(--sub);border:1px solid #d5dad3}
+  .callegend{display:flex;gap:6px;align-items:center;justify-content:center;font-size:11px;color:var(--sub);margin-top:8px;flex-wrap:wrap}
+  .callegend .cm{margin-left:4px}
   .actions{display:flex;gap:2px;align-items:center}
   #toast{z-index:100;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;opacity:0;transition:.2s;pointer-events:none;max-width:90%}
   #toast.show{opacity:1}
@@ -641,19 +656,62 @@
       ${done.length ? done.map(m => meetCard(m, false)).join('') : '<div class="card muted">아직 없어요.</div>'}`;
   }
 
-  // ===== 월별 정산 =====
-  let MONTH = '';
+  // ===== 월별 (달력 + 정산) =====
+  let MONTH = '', PICK = '';
+  function allMeetings() {
+    const seen = {}, out = [];
+    [].concat(DATA.upcoming || [], DATA.settled || [], DATA.pending || [], DATA.past || []).forEach(m => {
+      if (!seen[m.id]) { seen[m.id] = 1; out.push(m); }
+    });
+    return out;
+  }
+  const ymAdd = (ym, n) => { const d = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5)) - 1 + n, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+
+  function calendarHtml(ym, byDate, today) {
+    const y = Number(ym.slice(0, 4)), mo = Number(ym.slice(5)) - 1;
+    const first = new Date(y, mo, 1).getDay(), days = new Date(y, mo + 1, 0).getDate();
+    let cells = '';
+    for (let i = 0; i < first; i++) cells += '<div class="cd empty"></div>';
+    for (let d = 1; d <= days; d++) {
+      const ds = ym + '-' + String(d).padStart(2, '0');
+      const ms = byDate[ds] || [];
+      const wd = (first + d - 1) % 7;
+      let mark = '';
+      if (ms.length) {
+        const unpaid = ms.reduce((s, m) => s + (m.status === '정산' ? m.count - m.paidCount : 0), 0);
+        const vote = ms.some(m => m.status === '예정');
+        const yes = ms.reduce((s, m) => s + (m.status === '예정' && m.votes ? m.votes.yes.length : 0), 0);
+        mark = vote ? `<span class="cm vote">🙋${yes}</span>`
+          : unpaid ? `<span class="cm due">${unpaid}</span>` : '<span class="cm ok">✓</span>';
+      }
+      cells += `<div class="cd${ms.length ? ' has' : ''}${ds === today ? ' today' : ''}${ds === PICK ? ' pick' : ''}${wd === 0 ? ' sun' : wd === 6 ? ' sat' : ''}"${ms.length ? ` data-day="${ds}"` : ''}>
+        <span class="dn">${d}</span>${mark}</div>`;
+    }
+    return `<div class="cal">${['일', '월', '화', '수', '목', '금', '토'].map((w, i) => `<div class="cw${i === 0 ? ' sun' : i === 6 ? ' sat' : ''}">${w}</div>`).join('')}${cells}</div>`;
+  }
+
   function renderMonthly() {
+    const today = DATA.today || localToday();
     const list = DATA.monthly || [];
-    if (!list.length) { $('#app').innerHTML = '<div class="card muted">아직 정산된 모임이 없어요.</div>'; return; }
-    if (!list.some(g => g.ym === MONTH)) MONTH = list[0].ym;
+    if (!MONTH) MONTH = today.slice(0, 7);
+    const byDate = {};
+    allMeetings().forEach(m => { if (m.date.slice(0, 7) === MONTH) (byDate[m.date] = byDate[m.date] || []).push(m); });
     const g = list.find(x => x.ym === MONTH);
     const ymTxt = ym => `${ym.slice(0, 4)}년 ${Number(ym.slice(5))}월`;
-    const surplus = g.charged - g.fee;
+    const picked = PICK && PICK.slice(0, 7) === MONTH ? (byDate[PICK] || []) : [];
+
     $('#app').innerHTML = `
-      <div class="card" style="padding:10px 12px">
-        <select id="mSel">${list.map(x => `<option value="${x.ym}" ${x.ym === MONTH ? 'selected' : ''}>${ymTxt(x.ym)}</option>`).join('')}</select>
+      <div class="card" style="padding:10px 10px 8px">
+        <div class="calhead">
+          <button class="mini g" id="mPrev">◀</button><b>${ymTxt(MONTH)}</b><button class="mini g" id="mNext">▶</button>
+        </div>
+        ${calendarHtml(MONTH, byDate, today)}
+        <div class="callegend"><span class="cm ok">✓</span>전원 납부 <span class="cm due">2</span>미납 인원 <span class="cm vote">🙋3</span>투표 중</div>
       </div>
+      ${picked.length ? picked.map(m => meetCard(m, m.date >= today)).join('')
+        : Object.keys(byDate).length ? '<div class="muted" style="text-align:center;margin:-2px 0 10px">날짜를 누르면 그날 일정이 보여요</div>' : ''}
+
+      ${g ? `
       <div class="stats" style="margin-bottom:10px">
         <div class="stat"><div class="l">모임</div><div class="v">${g.meetings.length}회</div></div>
         <div class="stat"><div class="l">대관료 합계</div><div class="v">${won(g.fee)}원</div></div>
@@ -662,8 +720,7 @@
         <div class="stat"><div class="l">받은 돈 (납부·선불)</div><div class="v plus">${won(g.collected)}원</div></div>
         <div class="stat"><div class="l">미납</div><div class="v ${g.unpaid ? 'minus' : 'zero'}">${won(g.unpaid)}원</div></div>
       </div>
-      ${surplus ? `<div class="muted" style="margin:-4px 4px 10px">1/N 올림으로 생긴 차액 ${won(surplus)}원 (청구 ${won(g.charged)}원 − 대관료 ${won(g.fee)}원)</div>` : ''}
-
+      ${g.charged - g.fee ? `<div class="muted" style="margin:-4px 4px 10px">1/N 올림으로 생긴 차액 ${won(g.charged - g.fee)}원 (청구 ${won(g.charged)}원 − 대관료 ${won(g.fee)}원)</div>` : ''}
       <div class="sec">사람별</div>
       <div class="card list">
         ${g.people.map(p => `
@@ -672,18 +729,13 @@
               <div class="muted">${p.count}회 참석 · ${won(p.amount)}원${p.prepaid ? ` (선불 ${won(p.prepaid)}원)` : ''}</div></div>
             ${p.unpaid ? `<div class="amt minus" style="font-size:15px">${won(p.unpaid)}원<small>미납</small></div>` : '<div class="amt done" style="font-size:14px">✓ 완료</div>'}
           </div>`).join('')}
-      </div>
+      </div>` : '<div class="card muted">이 달에는 정산된 모임이 없어요.</div>'}`;
 
-      <div class="sec">모임별</div>
-      <div class="card list">
-        ${g.meetings.map(m => `
-          <div class="row" style="cursor:default">
-            <div><b>${fmtShort(m.date)}</b> <span class="muted">${esc(m.place)}${m.court ? ' · ' + esc(courtTxt(m.court)) : ''}</span>
-              <div class="muted">대관료 ${won(m.fee)}원 · ${m.count}명 × ${won(m.per)}원</div></div>
-            <span class="muted">${m.paidCount === m.count ? '<span class="plus">✓ 전원</span>' : `납부 ${m.paidCount}/${m.count}`}</span>
-          </div>`).join('')}
-      </div>`;
-    $('#mSel').onchange = e => { MONTH = e.target.value; renderMonthly(); };
+    $('#mPrev').onclick = () => { MONTH = ymAdd(MONTH, -1); PICK = ''; renderMonthly(); };
+    $('#mNext').onclick = () => { MONTH = ymAdd(MONTH, 1); PICK = ''; renderMonthly(); };
+    document.querySelectorAll('.cd[data-day]').forEach(el => el.onclick = () => {
+      PICK = PICK === el.dataset.day ? '' : el.dataset.day; renderMonthly();
+    });
   }
 
   // ===== 관리 =====
