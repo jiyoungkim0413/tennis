@@ -115,7 +115,8 @@
   .pbtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
   .pb{flex:1 1 30%;text-align:center;text-decoration:none;padding:11px 6px;border-radius:10px;border:1px solid #d5dad3;background:#fff;color:var(--ink);font-size:14px;font-weight:600}
   .pb.toss{background:#3182f6;border-color:#3182f6;color:#fff}
-  .pb.kakao{background:#fee500;border-color:#fee500;color:#191919}
+  .pb.kbank{background:#ffe300;border-color:#ffe300;color:#191919}
+  .pb.kakao{background:#191919;border-color:#191919;color:#fee500}
   .chip.reported{background:#fdf6e3;color:#b7791f}
   .hchip.wait{background:#fdf6e3;border-color:#fdf6e3;color:#b7791f}
   .card.attn{box-shadow:0 0 0 2px #f0c36d}
@@ -288,21 +289,6 @@
       document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); return ok;
     } catch (e) { return false; }
   }
-  // 은행 이름 → 금융기관 코드 (카카오페이 계좌송금 링크용)
-  const BANK_CODES = [
-    ['카카오', '090'], ['토스', '092'], ['케이뱅크', '089'], ['국민', '004'], ['KB', '004'], ['신한', '088'],
-    ['우리', '020'], ['하나', '081'], ['농협', '011'], ['NH', '011'], ['기업', '003'], ['IBK', '003'],
-    ['SC', '023'], ['제일', '023'], ['씨티', '027'], ['산업', '002'], ['수협', '007'], ['새마을', '045'],
-    ['신협', '048'], ['우체국', '071'], ['부산', '032'], ['경남', '039'], ['광주', '034'], ['전북', '037'],
-    ['제주', '035'], ['대구', '031'], ['iM', '031']
-  ];
-  function bankCode(name) {
-    const n = String(name || '').replace(/\s/g, '');
-    if (/카카오페이/.test(n)) return '';           // 카카오페이(증권 등)는 은행 아님
-    const hit = BANK_CODES.find(([k]) => n.toUpperCase().indexOf(k.toUpperCase()) >= 0);
-    return hit ? hit[1] : '';
-  }
-
   function payBoxHtml(p) {
     const info = DATA.payInfo || {};
     const amt = Math.max(0, -p.balance);
@@ -310,23 +296,19 @@
     const acct = String(info.account || '').replace(/[^0-9]/g, '');
     const SL = '/';   // Google이 문자열 안의 슬래시 두 개를 주석으로 지워서, 따로 붙임
     const toss = info.bank && acct ? `supertoss:${SL}${SL}send?bank=${encodeURIComponent(info.bank)}&accountNo=${acct}&amount=${amt}` : '';
-    const code = bankCode(info.bank);
-    // 카카오페이: 은행을 알아보면 그 계좌·금액이 채워진 계좌송금 화면, 아니면 송금코드 링크
-    const kakaoAcct = code && acct ? `kakaopay:${SL}${SL}money/to/bank?bank_code=${code}&bank_account_number=${acct}&amount=${amt}` : '';
-    const kakao = kakaoAcct || info.kakao || '';
-    const has = toss || kakao || acct;
+    const has = toss || acct;
     return `
       <div class="paybox">
         <div class="ptop"><span>${esc(p.name)}님 낼 돈</span><b>${won(amt)}원</b></div>
         ${p.unpaid.length ? `<div class="muted">${p.unpaid.map(fmtMD).join(', ')}분</div>` : ''}
         ${p.reported ? `<div class="pwait">⏳ 송금 알림 보냄 · 총무 확인을 기다리는 중이에요</div>` : ''}
-        ${has ? `<div class="pbtns">
-          ${toss ? `<a class="pb toss" href="${toss}" target="${IN_FRAME ? '_blank' : '_self'}" rel="noopener" data-copy="${amt}" data-app="토스">토스로 보내기</a>` : ''}
-          ${kakao ? `<a class="pb kakao" href="${esc(kakao)}" target="${IN_FRAME && kakaoAcct ? '_blank' : kakaoAcct ? '_self' : '_blank'}" rel="noopener" data-copy="${amt}" ${kakaoAcct ? '' : 'data-kakao="1"'} data-app="카카오페이">카카오페이로 보내기</a>` : ''}
+        ${has ? `<div class="muted" style="margin-top:10px;font-size:12px">송금 앱 선택</div><div class="pbtns" style="margin-top:4px">
+          ${toss ? `<a class="pb toss" href="${toss}" target="${IN_FRAME ? '_blank' : '_self'}" rel="noopener" data-copy="${amt}" data-app="토스">토스</a>` : ''}
+          ${acct ? `<a class="pb kbank" href="kakaobank:${SL}${SL}" target="${IN_FRAME ? '_blank' : '_self'}" data-kbank="${amt}">카카오뱅크</a>` : ''}
           ${acct ? `<button class="pb" data-copyacct="${amt}">계좌·금액 복사</button>` : ''}
         </div>
         ${acct ? `<div class="muted" style="margin-top:6px">${esc(info.bank)} ${esc(info.account)}${info.holder ? ' · ' + esc(info.holder) : ''}</div>
-          <div class="muted" style="font-size:12px">카카오뱅크·은행 앱은 '계좌·금액 복사' 후 앱을 열면 복사한 계좌가 자동으로 떠요.</div>` : ''}
+          <div class="muted" style="font-size:12px">카카오뱅크는 계좌번호가 복사된 채로 앱이 열려요. 이체에서 붙여넣고 금액만 입력하세요. 다른 은행 앱은 '계좌·금액 복사' 후 여세요.</div>` : ''}
         ${info.note ? `<div class="muted">${esc(info.note)}</div>` : ''}`
         : '<div class="muted" style="margin-top:6px">총무가 아직 송금 정보를 등록하지 않았어요.</div>'}
         ${p.reported
@@ -355,8 +337,7 @@
     const c = e.target.closest('[data-copy]');
     if (c) {
       copyText(String(c.dataset.copy));
-      if (c.dataset.kakao) toast(`금액 ${won(c.dataset.copy)}원을 복사했어요. 카카오페이에서 붙여넣으세요`);
-      else toast(`${c.dataset.app}를 여는 중…`);
+      toast(`${c.dataset.app}를 여는 중…`);
       // 1.5초 안에 앱으로 안 넘어가면(화면이 계속 보이면) 안내
       const app = c.dataset.app;
       let left = false;
@@ -368,6 +349,14 @@
         if (!left) toast(`${app} 앱이 안 열렸어요. 아래 '계좌·금액 복사'를 눌러 은행 앱에서 보내 주세요`);
       }, 1500);
       return;   // 링크 이동(새 창)은 그대로 진행
+    }
+    const kb = e.target.closest('[data-kbank]');
+    if (kb) {
+      // 카카오뱅크는 계좌·금액을 넣어 여는 링크가 없어서: 계좌번호를 복사해 두고 앱만 엶
+      const info = DATA.payInfo || {};
+      copyText(`${info.bank} ${info.account}`);
+      toast(`계좌를 복사했어요. 카카오뱅크에서 이체 → 붙여넣기, 금액 ${won(kb.dataset.kbank)}원 입력`);
+      return;   // 링크 이동(앱 열기)은 그대로 진행
     }
     const ca = e.target.closest('[data-copyacct]');
     if (ca) {
@@ -764,8 +753,6 @@
           <div><label>예금주</label><input id="iHolder" value="${esc(info.holder)}" placeholder="예) 김지영"></div>
         </div>
         <label>계좌번호</label><input id="iAcct" inputmode="numeric" value="${esc(info.account)}" placeholder="예) 123456-78-901234">
-        <label>카카오페이 송금코드 링크 (보통은 비워 두세요)</label><input id="iKakao" value="${esc(info.kakao)}" placeholder="qr.kakaopay.com 으로 시작하는 링크">
-        <div class="muted">은행 이름을 알아보면 카카오페이도 위 계좌로 바로 보내요. 은행을 못 알아볼 때만 송금코드 링크를 써요(코드 만든 사람에게 감).</div>
         <label>안내 문구 (선택)</label><input id="iNote" value="${esc(info.note)}" placeholder="예) 입금자명은 본인 이름으로">
         <div class="muted" style="margin-top:6px">은행은 '국민', '신한', '카카오뱅크', '토스뱅크'처럼 짧게 쓰면 토스 송금 화면이 잘 열려요.</div>
         <button class="btn" id="iBtn">저장</button>
@@ -826,7 +813,7 @@
     }));
 
     $('#iBtn').onclick = busy(async () => {
-      await api('setPayInfo', PIN, { bank: $('#iBank').value, account: $('#iAcct').value, holder: $('#iHolder').value, kakao: $('#iKakao').value, note: $('#iNote').value });
+      await api('setPayInfo', PIN, { bank: $('#iBank').value, account: $('#iAcct').value, holder: $('#iHolder').value, kakao: '', note: $('#iNote').value });
       toast('송금 정보를 저장했어요');
     });
     document.querySelectorAll('[data-okrep]').forEach(b => b.onclick = busy(async () => {
