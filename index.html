@@ -14,6 +14,10 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <meta name="apple-mobile-web-app-title" content="테니스">
 <meta name="theme-color" content="#2c6a4b">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎾</text></svg>">
@@ -164,6 +168,11 @@
   header::after{content:'';position:absolute;left:0;bottom:0;height:3px;width:0;background:#bfe3cd;opacity:0}
   body.busy header::after{opacity:1;animation:loadbar 1.1s ease-in-out infinite}
   @keyframes loadbar{0%{left:0;width:0}50%{left:15%;width:60%}100%{left:100%;width:0}}
+  #a2hs{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:30;display:flex;align-items:center;gap:10px;background:#1f2a24;color:#fff;border-radius:14px;padding:10px 12px;font-size:13px;line-height:1.45;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+  #a2hs .a2ico{flex:0 0 36px;height:36px;border-radius:9px;background:url(apple-touch-icon.png) center/cover,#2c6a4b}
+  #a2hs .a2t{flex:1}
+  #a2hs .a2x{border:0;background:none;color:#fff;opacity:.7;font-size:16px;padding:4px 6px}
+  #a2hs .a2go{margin-top:6px;border:0;background:#d7f05a;color:#1f2a24;font-weight:700;border-radius:8px;padding:6px 12px}
   .actions{display:flex;gap:2px;align-items:center}
   #toast{z-index:100;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;opacity:0;transition:.2s;pointer-events:none;max-width:90%}
   #toast.show{opacity:1}
@@ -1093,6 +1102,36 @@
     if (!same) { render(); window.scrollTo(0, 0); }   // 지금 데이터로 먼저 보여주고
     refresh(same);                                     // 뒤에서 최신 데이터 받아오기
   });
+  // ===== 홈 화면에 추가 안내 =====
+  (function homeScreenHint() {
+    if (IN_GAS) return;
+    const ua = navigator.userAgent;
+    const standalone = window.navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+    if (standalone) return;                                  // 이미 홈 화면 앱으로 열림
+    let until = 0;
+    try { until = Number(localStorage.getItem('tennis_a2hs_off') || 0); } catch (e) {}
+    if (Date.now() < until) return;                          // 닫은 지 2주 안 됨
+    const isIOS = /iPhone|iPad|iPod/.test(ua);
+    const isKakao = /KAKAOTALK/i.test(ua);
+    const bar = document.createElement('div');
+    bar.id = 'a2hs';
+    const close = '<button class="a2x" aria-label="닫기">✕</button>';
+    const show = html => { bar.innerHTML = '<div class="a2ico"></div><div class="a2t">' + html + '</div>' + close; document.body.appendChild(bar);
+      bar.querySelector('.a2x').onclick = () => { bar.remove(); try { localStorage.setItem('tennis_a2hs_off', Date.now() + 14 * 864e5); } catch (e) {} }; };
+    if (isKakao) {
+      show('<b>홈 화면에 앱처럼 추가하려면</b><br>' + (isIOS ? '오른쪽 아래 <b>⋯</b> → <b>Safari로 열기</b> 후 다시 해 주세요' : '오른쪽 위 <b>⋮</b> → <b>다른 브라우저로 열기</b> 후 다시 해 주세요'));
+    } else if (isIOS) {
+      show('<b>홈 화면에 추가하면 앱처럼 써요</b><br>아래 <b>공유 버튼(□↑)</b> → <b>홈 화면에 추가</b>');
+    } else {
+      // 안드로이드 크롬: 설치 버튼
+      window.addEventListener('beforeinstallprompt', e => {
+        e.preventDefault();
+        show('<b>홈 화면에 앱으로 설치할 수 있어요</b><br><button class="a2go">설치하기</button>');
+        bar.querySelector('.a2go').onclick = () => { e.prompt(); bar.remove(); };
+      });
+    }
+  })();
+
   // 시작: 페이지에 같이 온 데이터 → 바로 표시. 없으면 휴대폰에 저장된 마지막 화면 → 표시 후 새로고침
   (function start() {
     if (INIT) {
