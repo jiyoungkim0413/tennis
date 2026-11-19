@@ -138,15 +138,18 @@
   .calhead b{font-size:16px}
   .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
   .cw{text-align:center;font-size:11px;color:var(--sub);padding:2px 0}
-  .cd{min-height:44px;border-radius:9px;display:flex;flex-direction:column;align-items:center;padding-top:4px;gap:2px;font-size:13px}
+  .cd{min-height:44px;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px;gap:3px;font-size:13px}
+  .cd .dn{line-height:18px;height:18px}
   .cd.has{background:var(--accent2);cursor:pointer}
   .cd.today{box-shadow:inset 0 0 0 2px var(--accent)}
   .cd.pick{background:var(--accent);color:#fff}
   .cd.pick .cm{box-shadow:0 0 0 1px #fff}
   .sun .dn,.cw.sun{color:#d2453b}.sat .dn,.cw.sat{color:#2f5fb3}
   .cd.pick .dn{color:#fff}
-  .cm{font-size:10px;font-weight:700;border-radius:8px;padding:0 5px;line-height:15px}
-  .cm.ok{background:#1d8455;color:#fff}.cm.due{background:#d2453b;color:#fff}.cm.vote{background:#fff;color:var(--sub);border:1px solid #d5dad3}
+  .cm{display:inline-flex;align-items:center;justify-content:center;gap:1px;height:16px;min-width:16px;box-sizing:border-box;font-size:10px;font-weight:700;border-radius:8px;padding:0 5px;line-height:1}
+  .cm.vt{font-size:9.5px}
+  .cm.lg-blank{min-width:12px;width:12px;height:12px;padding:0;border-radius:50%}
+  .cm.ok{background:#1d8455;color:#fff}.cm.due{background:#d2453b;color:#fff}.cm.vt{background:#fff;color:var(--sub);border:1px solid #d5dad3}
   .callegend{display:flex;gap:6px;align-items:center;justify-content:center;font-size:11px;color:var(--sub);margin-top:8px;flex-wrap:wrap}
   .callegend .cm{margin-left:4px}
   header::after{content:'';position:absolute;left:0;bottom:0;height:3px;width:0;background:#bfe3cd;opacity:0}
@@ -700,7 +703,7 @@
         const unpaid = ms.reduce((s, m) => s + (m.status === '정산' ? m.count - m.paidCount : 0), 0);
         const vote = ms.some(m => m.status === '예정');
         const yes = ms.reduce((s, m) => s + (m.status === '예정' && m.votes ? m.votes.yes.length : 0), 0);
-        mark = vote ? `<span class="cm vote">🙋${yes}</span>`
+        mark = vote ? `<span class="cm vt">🙋${yes}</span>`
           : unpaid ? `<span class="cm due">${unpaid}</span>` : '<span class="cm ok">✓</span>';
       }
       cells += `<div class="cd${ms.length ? ' has' : ''}${ds === today ? ' today' : ''}${ds === PICK ? ' pick' : ''}${wd === 0 ? ' sun' : wd === 6 ? ' sat' : ''}"${ms.length ? ` data-day="${ds}"` : ''}>
@@ -725,7 +728,7 @@
           <button class="mini g" id="mPrev">◀</button><b>${ymTxt(MONTH)}</b><button class="mini g" id="mNext">▶</button>
         </div>
         ${calendarHtml(MONTH, byDate, today)}
-        <div class="callegend"><span class="cm ok">✓</span>전원 납부 <span class="cm due">2</span>미납 인원 <span class="cm vote">🙋3</span>투표 중</div>
+        <div class="callegend"><span class="cm ok">✓</span>전원 납부 <span class="cm due lg-blank"></span>미납 인원 수 <span class="cm vt">🙋</span>투표 중 (참석 인원 수)</div>
       </div>
       ${picked.length ? picked.map(m => meetCard(m, m.date >= today)).join('')
         : Object.keys(byDate).length ? '<div class="muted" style="text-align:center;margin:-2px 0 10px">날짜를 누르면 그날 일정이 보여요</div>' : ''}
