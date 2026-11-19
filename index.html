@@ -210,8 +210,19 @@
       <div class="muted" style="margin:8px 0;word-break:break-all">${String(msg).replace(/[<>&]/g, '')}</div>
       <button class="btn" onclick="try{Object.keys(localStorage).forEach(function(k){if(k.indexOf('tennis_summary')===0)localStorage.removeItem(k)})}catch(e){};location.reload()">다시 불러오기</button></div>`;
   }
-  window.addEventListener('error', e => showFatal((e.message || '') + (e.lineno ? ' (줄 ' + e.lineno + ')' : '')));
-  window.addEventListener('unhandledrejection', e => showFatal(e.reason && e.reason.message || e.reason));
+  // 화면이 한 번이라도 그려졌으면 오류가 나도 화면을 지우지 않음
+  let RENDERED = false;
+  window.addEventListener('error', e => {
+    const msg = e.message || '';
+    // 브라우저(공유 시트·미리보기·확장 프로그램)에서 난 외부 오류는 내용이 없음 → 무시
+    if (!e.filename || /^Script error/i.test(msg)) return;
+    if (RENDERED) { try { console.warn('[테니스] 오류', msg, e.lineno); } catch (x) {} return; }
+    showFatal(msg + (e.lineno ? ' (줄 ' + e.lineno + ')' : ''));
+  });
+  window.addEventListener('unhandledrejection', e => {
+    if (RENDERED) return;
+    showFatal(e.reason && e.reason.message || e.reason);
+  });
 
   // 서버가 넣어 준 첫 화면 데이터 (JSON 블록)
   let INIT = null, VER = '';
@@ -328,6 +339,7 @@
 
   function render() {
     if (SPEED.first == null) SPEED.first = performance.now() - T0;
+    RENDERED = true;
     document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === TAB));
     if (!DATA) return;
     if (TAB === 'status') renderStatus();
