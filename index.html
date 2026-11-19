@@ -1130,17 +1130,29 @@
     const close = '<button class="a2x" aria-label="닫기">✕</button>';
     const show = html => { bar.innerHTML = '<div class="a2ico"></div><div class="a2t">' + html + '</div>' + close; document.body.appendChild(bar);
       bar.querySelector('.a2x').onclick = () => { bar.remove(); try { localStorage.setItem('tennis_a2hs_off', Date.now() + 14 * 864e5); } catch (e) {} }; };
+    const isSamsung = /SamsungBrowser/i.test(ua);
+    const isAndroid = /Android/i.test(ua);
     if (isKakao) {
-      show('<b>홈 화면에 앱처럼 추가하려면</b><br>' + (isIOS ? '오른쪽 아래 <b>⋯</b> → <b>Safari로 열기</b> 후 다시 해 주세요' : '오른쪽 위 <b>⋮</b> → <b>다른 브라우저로 열기</b> 후 다시 해 주세요'));
+      show('<b>홈 화면에 앱처럼 추가하려면</b><br>' + (isIOS
+        ? '오른쪽 아래 <b>⋯</b> → <b>Safari로 열기</b> 후 다시 해 주세요'
+        : '오른쪽 위 <b>⋮</b> → <b>다른 브라우저로 열기</b> 후 다시 해 주세요'));
     } else if (isIOS) {
-      show('<b>홈 화면에 추가하면 앱처럼 써요</b><br>아래 <b>공유 버튼(□↑)</b> → <b>홈 화면에 추가</b>');
-    } else {
-      // 안드로이드 크롬: 설치 버튼
-      window.addEventListener('beforeinstallprompt', e => {
-        e.preventDefault();
-        show('<b>홈 화면에 앱으로 설치할 수 있어요</b><br><button class="a2go">설치하기</button>');
-        bar.querySelector('.a2go').onclick = () => { e.prompt(); bar.remove(); };
+      show('<b>아이폰 홈 화면에 추가하기</b><br><b>공유 버튼(□↑)</b> → <b>홈 화면에 추가</b> → <b>추가</b><br><span style="opacity:.75">공유 버튼이 안 보이면 <b>⋯</b> → <b>공유</b></span>');
+    } else if (isAndroid) {
+      // 크롬은 [설치하기] 버튼, 안 되면 직접 하는 방법 안내
+      let prompted = false;
+      window.addEventListener('beforeinstallprompt', ev => {
+        ev.preventDefault(); prompted = true;
+        if (bar.parentNode) bar.remove();
+        show('<b>갤럭시 홈 화면에 추가하기</b><br><button class="a2go">설치하기</button>');
+        bar.querySelector('.a2go').onclick = () => { ev.prompt(); bar.remove(); };
       });
+      setTimeout(() => {
+        if (prompted) return;
+        show('<b>갤럭시 홈 화면에 추가하기</b><br>' + (isSamsung
+          ? '아래 <b>메뉴(≡)</b> → <b>현재 페이지 추가</b> → <b>홈 화면</b>'
+          : '오른쪽 위 <b>⋮</b> → <b>홈 화면에 추가</b> (또는 <b>앱 설치</b>) → <b>추가</b>'));
+      }, 2500);
     }
   })();
 
