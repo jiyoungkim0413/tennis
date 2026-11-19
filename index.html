@@ -133,6 +133,7 @@
   .rvb.no{border-color:#c9cfc8;color:var(--sub)}
   .rvb.on{background:var(--accent);color:#fff}
   .rvb.no.on{background:#8a918c;border-color:#8a918c;color:#fff}
+  .lowtag{font-size:11px;font-weight:700;color:#fff;background:#e07b24;border-radius:10px;padding:2px 8px}
   .actions{display:flex;gap:2px;align-items:center}
   #toast{z-index:100;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;opacity:0;transition:.2s;pointer-events:none;max-width:90%}
   #toast.show{opacity:1}
@@ -151,6 +152,7 @@
   <nav>
     <button data-tab="status" class="on">현황</button>
     <button data-tab="meetings">일정</button>
+    <button data-tab="monthly">월별</button>
     <button data-tab="admin">관리</button>
   </nav>
 </header>
@@ -275,6 +277,7 @@
     if (!DATA) return;
     if (TAB === 'status') renderStatus();
     else if (TAB === 'meetings') renderMeetings();
+    else if (TAB === 'monthly') renderMonthly();
     else renderAdmin();
   }
 
@@ -553,7 +556,9 @@
             <div><div class="name">${esc(x.name)}</div>
               <div class="muted">충전 ${won(x.topup)} · 사용 ${won(x.used)}${x.usedCount ? ` (${x.usedCount}회)` : ''}</div>${unpaidTxt(x)}</div>
             ${x.balance >= 0
-              ? `<div class="amt plus">${won(x.balance)}원<small>남음${DATA.lastPer && x.balance ? ` · 약 ${Math.floor(x.balance / DATA.lastPer)}회분` : ''}</small></div>`
+              ? (DATA.lastPer && x.balance <= DATA.lastPer
+                  ? `<div class="rcol"><div class="amt ${x.balance ? 'plus' : 'zero'}">${won(x.balance)}원<small>남음</small></div><span class="lowtag">충전 필요</span></div>`
+                  : `<div class="amt plus">${won(x.balance)}원<small>남음${DATA.lastPer && x.balance ? ` · 약 ${Math.floor(x.balance / DATA.lastPer)}회분` : ''}</small></div>`)
               : payCol(x, `<div class="amt minus">${won(x.balance)}원<small>선불 소진 · 낼 돈</small></div>`)}
           </div>`).join('')}
       </div>` : ''}
@@ -634,6 +639,51 @@
       ${up.length ? up.map(m => meetCard(m, true)).join('') : '<div class="card muted">예정된 일정이 없어요.</div>'}
       <div class="sec">지난 모임</div>
       ${done.length ? done.map(m => meetCard(m, false)).join('') : '<div class="card muted">아직 없어요.</div>'}`;
+  }
+
+  // ===== 월별 정산 =====
+  let MONTH = '';
+  function renderMonthly() {
+    const list = DATA.monthly || [];
+    if (!list.length) { $('#app').innerHTML = '<div class="card muted">아직 정산된 모임이 없어요.</div>'; return; }
+    if (!list.some(g => g.ym === MONTH)) MONTH = list[0].ym;
+    const g = list.find(x => x.ym === MONTH);
+    const ymTxt = ym => `${ym.slice(0, 4)}년 ${Number(ym.slice(5))}월`;
+    const surplus = g.charged - g.fee;
+    $('#app').innerHTML = `
+      <div class="card" style="padding:10px 12px">
+        <select id="mSel">${list.map(x => `<option value="${x.ym}" ${x.ym === MONTH ? 'selected' : ''}>${ymTxt(x.ym)}</option>`).join('')}</select>
+      </div>
+      <div class="stats" style="margin-bottom:10px">
+        <div class="stat"><div class="l">모임</div><div class="v">${g.meetings.length}회</div></div>
+        <div class="stat"><div class="l">대관료 합계</div><div class="v">${won(g.fee)}원</div></div>
+      </div>
+      <div class="stats" style="margin-bottom:12px">
+        <div class="stat"><div class="l">받은 돈 (납부·선불)</div><div class="v plus">${won(g.collected)}원</div></div>
+        <div class="stat"><div class="l">미납</div><div class="v ${g.unpaid ? 'minus' : 'zero'}">${won(g.unpaid)}원</div></div>
+      </div>
+      ${surplus ? `<div class="muted" style="margin:-4px 4px 10px">1/N 올림으로 생긴 차액 ${won(surplus)}원 (청구 ${won(g.charged)}원 − 대관료 ${won(g.fee)}원)</div>` : ''}
+
+      <div class="sec">사람별</div>
+      <div class="card list">
+        ${g.people.map(p => `
+          <div class="row" style="cursor:default">
+            <div><div class="name" style="font-size:15px">${esc(p.name)}</div>
+              <div class="muted">${p.count}회 참석 · ${won(p.amount)}원${p.prepaid ? ` (선불 ${won(p.prepaid)}원)` : ''}</div></div>
+            ${p.unpaid ? `<div class="amt minus" style="font-size:15px">${won(p.unpaid)}원<small>미납</small></div>` : '<div class="amt done" style="font-size:14px">✓ 완료</div>'}
+          </div>`).join('')}
+      </div>
+
+      <div class="sec">모임별</div>
+      <div class="card list">
+        ${g.meetings.map(m => `
+          <div class="row" style="cursor:default">
+            <div><b>${fmtShort(m.date)}</b> <span class="muted">${esc(m.place)}${m.court ? ' · ' + esc(courtTxt(m.court)) : ''}</span>
+              <div class="muted">대관료 ${won(m.fee)}원 · ${m.count}명 × ${won(m.per)}원</div></div>
+            <span class="muted">${m.paidCount === m.count ? '<span class="plus">✓ 전원</span>' : `납부 ${m.paidCount}/${m.count}`}</span>
+          </div>`).join('')}
+      </div>`;
+    $('#mSel').onchange = e => { MONTH = e.target.value; renderMonthly(); };
   }
 
   // ===== 관리 =====
