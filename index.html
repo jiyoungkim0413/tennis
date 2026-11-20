@@ -856,7 +856,7 @@
             const list = DATA.pending.filter(m => m.date < today).concat(DATA.upcoming);
             return list.length ? list.map(m => schedRow(m, `<div class="actions">
               ${m.status === '예정' ? (m.date <= today ? '<span class="badge">참석자 미정</span>' : '') +
-                `<button class="mini g" data-edit="${esc(m.id)}">참석자 지정</button>` : `<button class="mini g" data-edit="${esc(m.id)}">수정</button>`}
+                `<button class="mini g" data-editinfo="${esc(m.id)}">수정</button><button class="mini g" data-edit="${esc(m.id)}">참석자 지정</button>` : `<button class="mini g" data-edit="${esc(m.id)}">수정</button>`}
               <button class="mini" data-delmeet="${esc(m.id)}">삭제</button></div>`) +
               (m.status === '정산' ? `<div class="subchips">${chipsHtml(m)}</div>`
                 : `<div class="subchips muted">투표 참석 ${m.votes.yes.length}${m.votes.yes.length ? ' (' + m.votes.yes.map(esc).join(', ') + ')' : ''} · 불참 ${m.votes.no.length}</div>`)).join('') : '<div class="muted">일정이 없어요.</div>';
@@ -932,6 +932,7 @@
       toast(r.per ? `일정 ${r.count}개 등록 · 1인당 ${won(r.per)}원 청구` : `일정 ${r.count}개 등록 완료`);
     });
     document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEdit(b.dataset.edit));
+    document.querySelectorAll('[data-editinfo]').forEach(b => b.onclick = () => openEdit(b.dataset.editinfo, true));
 
     // 입금
     const pMap = {}; DATA.people.forEach(p => pMap[p.name] = p);
@@ -1025,7 +1026,7 @@
     return () => { const all = checks.every(c => c.checked); checks.forEach(c => c.checked = !all); upd(); };
   }
 
-  function openEdit(id) {
+  function openEdit(id, infoOnly) {
     const m = DATA.upcoming.concat(DATA.pending, DATA.settled).find(x => x.id === id);
     if (!m) return;
     const settled = m.status === '정산';
@@ -1036,7 +1037,7 @@
     const pre = settled ? m.attendees : voteYes;
     pre.forEach(a => { if (names.indexOf(a) < 0) names.push(a); });
     openModal(`
-      <div class="head"><b>${fmtShort(m.date)} 일정 수정</b><button class="mini g" id="close">닫기</button></div>
+      <div class="head"><b>${fmtShort(m.date)} ${infoOnly ? '일정 정보 수정' : settled ? '일정 수정' : '참석자 지정'}</b><button class="mini g" id="close">닫기</button></div>
       <div class="card">
         <label>날짜</label><input id="eDate" type="date" value="${esc(m.date)}">
         <div class="inline">
@@ -1049,26 +1050,27 @@
           <div><label>대관료</label><input id="eFee" type="number" inputmode="numeric" value="${m.fee || ''}"></div>
         </div>
         <label>메모</label><input id="eMemo" value="${esc(m.memo)}">
+        ${infoOnly ? '<div class="muted" style="margin-top:8px">참석자와 투표는 그대로 두고 정보만 바꿔요.</div>' : `
         <label>참석자 <button class="linkbtn" id="eAll" style="float:right">전체 선택</button></label>
         ${voteYes.length ? `<div class="muted" style="margin-bottom:6px">🙋 투표에서 참석한 ${voteYes.length}명이 미리 체크돼 있어요.</div>` : ''}
         <div class="checks">${names.map(n => `<label><input type="checkbox" value="${esc(n)}" ${pre.indexOf(n) >= 0 ? 'checked' : ''}>${esc(n)}</label>`).join('')}</div>
         <div class="preview" id="ePrev"></div>
-        <div class="muted" style="margin-top:6px">${settled ? '저장하면 이 모임 청구가 새 금액·참석자로 다시 계산돼요. 입금 기록은 그대로예요. 참석자를 모두 빼면 청구가 취소돼요.' : '참석자를 고르면 그 사람들에게 1인당 금액이 청구돼요.'}</div>
+        <div class="muted" style="margin-top:6px">${settled ? '저장하면 이 모임 청구가 새 금액·참석자로 다시 계산돼요. 입금 기록은 그대로예요. 참석자를 모두 빼면 청구가 취소돼요.' : '참석자를 고르면 그 사람들에게 1인당 금액이 청구돼요.'}</div>`}
         <div class="err"></div>
         <button class="btn" id="eBtn">저장</button>
       </div>`);
     $('#close').onclick = closeModal;
     const checks = [...document.querySelectorAll('#modalBody .checks input')];
-    $('#eAll').onclick = bindPicker(checks, $('#eFee'), $('#ePrev'), '참석자 미정 · 청구 없음');
+    if (!infoOnly) $('#eAll').onclick = bindPicker(checks, $('#eFee'), $('#ePrev'), '참석자 미정 · 청구 없음');
     $('#eBtn').onclick = busy(async () => {
       const t1v = $('#eT1').value, t2v = $('#eT2').value;
       const r = await api('updateMeeting', PIN, id, {
         date: $('#eDate').value, time: t1v ? (t1v + '~' + (t2v || '')) : '',
         place: $('#ePlace').value, court: $('#eCourt').value, fee: $('#eFee').value, memo: $('#eMemo').value,
-        attendees: checks.filter(c => c.checked).map(c => c.value)
+        attendees: infoOnly ? undefined : checks.filter(c => c.checked).map(c => c.value)
       });
       closeModal();
-      toast(r.settled ? `저장 완료 · 1인당 ${won(r.per)}원` : '저장 완료');
+      toast(r.settled && !r.infoOnly ? `저장 완료 · 1인당 ${won(r.per)}원` : '저장 완료');
     });
   }
 
