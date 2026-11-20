@@ -113,9 +113,10 @@
   .vb.on{background:var(--accent);color:#fff}
   .vb.no.on{background:#8a918c;border-color:#8a918c;color:#fff}
   .vb.wide{width:100%;margin-top:10px;flex:none}
-  .onhero .vb{border-color:#fff}
-  .onhero .vb.on{background:#fff;color:var(--accent)}
-  .onhero .vb.no.on{background:rgba(255,255,255,.35);color:#fff;border-color:#fff}
+  .onhero .vb{background:transparent;border-color:rgba(255,255,255,.85);color:#fff}
+  .onhero .vb.on{background:#fff;border-color:#fff;color:var(--accent)}
+  .onhero .vb.no{border-color:rgba(255,255,255,.5);color:rgba(255,255,255,.85)}
+  .onhero .vb.no.on{background:rgba(255,255,255,.3);color:#fff;border-color:#fff}
   .vme{font-size:12px;margin-top:6px;color:var(--sub)}
   .onhero .vme,.onhero .vme .linkbtn{color:#fff;opacity:.85}
   .hero[data-goto]{cursor:pointer}
@@ -492,8 +493,8 @@
         ${v.no.length ? `<div class="vnames dim">🙅 ${v.no.map(esc).join(', ')}</div>` : ''}
         ${meOk ? `
           <div class="vbtns">
-            <button class="vb ${mine === '참석' ? 'on' : ''}" data-vote="${esc(m.id)}" data-c="참석">참석</button>
-            <button class="vb no ${mine === '불참' ? 'on' : ''}" data-vote="${esc(m.id)}" data-c="불참">불참</button>
+            <button class="vb ${mine === '참석' ? 'on' : ''}" data-vote="${esc(m.id)}" data-c="참석">${mine === '참석' ? '✓ ' : ''}참석</button>
+            <button class="vb no ${mine === '불참' ? 'on' : ''}" data-vote="${esc(m.id)}" data-c="불참">${mine === '불참' ? '✓ ' : ''}불참</button>
           </div>
           <div class="vme">${esc(ME)}님으로 투표 중 · <button class="linkbtn" data-me="1">이름 바꾸기</button></div>`
         : `<button class="vb wide" data-me="1">내 이름 선택하고 투표하기</button>`}
@@ -591,8 +592,8 @@
     if (!(ME && active.indexOf(ME) >= 0)) return `<div class="rvote">${cnt}<button class="rvb" data-me="1">투표하기</button></div>`;
     const mine = v.yes.indexOf(ME) >= 0 ? '참석' : v.no.indexOf(ME) >= 0 ? '불참' : '';
     return `<div class="rvote">${cnt}
-      <button class="rvb ${mine === '참석' ? 'on' : ''}" data-vote="${esc(m.id)}" data-c="참석">참석</button>
-      <button class="rvb no ${mine === '불참' ? 'on' : ''}" data-vote="${esc(m.id)}" data-c="불참">불참</button></div>`;
+      <button class="rvb ${mine === '참석' ? 'on' : ''}" data-vote="${esc(m.id)}" data-c="참석">${mine === '참석' ? '✓ ' : ''}참석</button>
+      <button class="rvb no ${mine === '불참' ? 'on' : ''}" data-vote="${esc(m.id)}" data-c="불참">${mine === '불참' ? '✓ ' : ''}불참</button></div>`;
   }
 
   function schedRow(m, extra, gotoId) {
