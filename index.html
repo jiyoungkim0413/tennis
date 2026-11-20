@@ -464,7 +464,20 @@
   // ===== 참석 투표 =====
   let ME = '';
   try { ME = localStorage.getItem('tennis_me') || ''; } catch (e) {}
-  const canVote = m => m.status === '예정' && m.date >= (DATA.today || localToday());
+  // 일정이 끝났는지: 오늘 일정은 종료 시간(없으면 시작 시간)이 지나면 끝난 것으로 봄
+  function isOver(m) {
+    const today = localToday();
+    if (m.date < today) return true;
+    if (m.date > today) return false;
+    const parts = String(m.time || '').split('~').map(s => s.trim());
+    const end = /^\d{1,2}:\d{2}$/.test(parts[1] || '') ? parts[1] : parts[0];
+    if (!/^\d{1,2}:\d{2}$/.test(end || '')) return false;   // 시간 없으면 오늘 하루 동안은 표시
+    const [h, mi] = end.split(':').map(Number);
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes() >= h * 60 + mi;
+  }
+  const comingUp = () => (DATA.upcoming || []).filter(m => !isOver(m));
+  const canVote = m => m.status === '예정' && m.date >= (DATA.today || localToday()) && !isOver(m);
 
   function voteHtml(m, onHero) {
     const v = m.votes || { yes: [], no: [] };
@@ -594,7 +607,7 @@
 
   // ===== 현황 =====
   function renderStatus() {
-    const up = DATA.upcoming;
+    const up = comingUp();
     // 선불 회원 / 일반 회원 나눠서 표시
     const pre = DATA.people.filter(x => x.prepaid).sort((a, b) => a.balance - b.balance || a.name.localeCompare(b.name, 'ko'));
     // 정산 현황에 보일 사람: 다가오는 일정·가장 최근 모임 참석자 + 낼 돈/적립금이 남은 사람
@@ -700,7 +713,10 @@
 
   // ===== 일정 탭 =====
   function renderMeetings() {
-    const up = DATA.upcoming, done = DATA.past || [];
+    const up = comingUp();
+    // 오늘 끝난 모임도 지난 모임 맨 위에
+    const endedToday = (DATA.upcoming || []).filter(m => isOver(m) && m.status === '정산').sort((a, b) => b.date.localeCompare(a.date) || String(b.time).localeCompare(String(a.time)));
+    const done = endedToday.concat((DATA.past || []).filter(p => !endedToday.some(e => e.id === p.id)));
     $('#app').innerHTML = `
       <div class="sec">다가오는 일정</div>
       ${up.length ? up.map(m => meetCard(m, true)).join('') : '<div class="card muted">예정된 일정이 없어요.</div>'}
@@ -1116,6 +1132,15 @@
     if (!same) { render(); window.scrollTo(0, 0); }   // 지금 데이터로 먼저 보여주고
     refresh(same);                                     // 뒤에서 최신 데이터 받아오기
   });
+  // 화면을 켜 둔 채 일정이 끝나면 자동으로 다음 일정으로
+  let lastUpKey = '';
+  setInterval(() => {
+    if (!DATA || (TAB !== 'status' && TAB !== 'meetings')) return;
+    const key = comingUp().map(m => m.id).join(',');
+    if (lastUpKey && key !== lastUpKey) safeRender(false);
+    lastUpKey = key;
+  }, 60000);
+
   // ===== 홈 화면에 추가 안내 =====
   (function homeScreenHint() {
     if (IN_GAS) return;
