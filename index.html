@@ -175,6 +175,10 @@
   #a2hs .a2t{flex:1}
   #a2hs .a2x{border:0;background:none;color:#fff;opacity:.7;font-size:16px;padding:4px 6px}
   #a2hs .a2go{margin-top:6px;border:0;background:#d7f05a;color:#1f2a24;font-weight:700;border-radius:8px;padding:6px 12px}
+  .wx{font-size:12.5px;margin-top:6px;padding:5px 9px;border-radius:8px;background:var(--accent2);color:var(--ink);display:inline-block}
+  .wx.rain{background:#fdeedd;color:#b5561b}
+  .wx.onhero{background:rgba(255,255,255,.16);color:#fff;margin-top:5px}
+  .wx.onhero.rain{background:#fdeedd;color:#b5561b}
   .actions{display:flex;gap:2px;align-items:center}
   #toast{z-index:100;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;opacity:0;transition:.2s;pointer-events:none;max-width:90%}
   #toast.show{opacity:1}
@@ -348,7 +352,87 @@
     else if (TAB === 'meetings') renderMeetings();
     else if (TAB === 'monthly') renderMonthly();
     else renderAdmin();
+    if (TAB !== 'admin') fillWeather();
   }
+
+  // ===== 날씨 (Open-Meteo, 키 없음) =====
+  // 장소 이름에 동네가 들어 있으면 그 동네, 없으면 평촌 기준
+  // 자주 가는 코트 (이름에 들어 있는 말로 찾음 · 구체적인 것부터)
+  const WX_PLACES = [
+    ['호계', 37.3730, 126.9550, '안양 호계'],
+    ['자유공원', 37.3870, 126.9640, '안양 자유공원'],
+    ['종합운동장', 37.4055, 126.9465, '안양 종합운동장'],
+    ['정부', 37.4290, 126.9905, '정부과천청사'],
+    ['산빛', 37.3920, 126.9830, '의왕 산빛공원 (포일동)'],
+    ['포일', 37.3920, 126.9830, '의왕 포일동'],
+    ['의왕테니스', 37.3960, 126.9950, '의왕테니스장 (청계동)'],
+    ['청계', 37.3960, 126.9950, '의왕 청계'],
+    ['안양시청', 37.3943, 126.9568, '안양시청'],
+    ['과천', 37.4292, 126.9876, '과천'],
+    ['의왕', 37.3448, 126.9683, '의왕'],
+    ['평촌', 37.3897, 126.9507, '평촌'],
+    ['안양', 37.3943, 126.9568, '안양']
+  ];
+  function wxLoc(place) {
+    const p = String(place || '').replace(/\s/g, '');
+    const hit = WX_PLACES.find(x => p.indexOf(x[0]) >= 0) || WX_PLACES.find(x => x[0] === '평촌');
+    return { key: hit[0], lat: hit[1], lon: hit[2], label: hit[3] };
+  }
+  const WX = {};         // 동네 → { at, hourly }
+  const WX_LOADING = {};
+  function wxFetch(loc) {
+    const c = WX[loc.key];
+    if (c && Date.now() - c.at < 3600e3) return Promise.resolve(c);
+    if (WX_LOADING[loc.key]) return WX_LOADING[loc.key];
+    try {
+      const saved = JSON.parse(localStorage.getItem('tennis_wx_' + loc.key) || 'null');
+      if (saved && Date.now() - saved.at < 3600e3) { WX[loc.key] = saved; return Promise.resolve(saved); }
+    } catch (e) {}
+    const SL = '/';
+    const url = 'https:' + SL + SL + 'api.open-meteo.com/v1/forecast?latitude=' + loc.lat + '&longitude=' + loc.lon +
+      '&hourly=precipitation_probability,precipitation,temperature_2m,weather_code&timezone=Asia%2FSeoul&forecast_days=16';
+    WX_LOADING[loc.key] = fetch(url).then(r => r.json()).then(j => {
+      const h = j.hourly || {};
+      const o = { at: Date.now(), hourly: { time: h.time || [], pop: h.precipitation_probability || [], mm: h.precipitation || [], t: h.temperature_2m || [], code: h.weather_code || [] } };
+      WX[loc.key] = o;
+      try { localStorage.setItem('tennis_wx_' + loc.key, JSON.stringify(o)); } catch (e) {}
+      return o;
+    }).catch(() => null).finally(() => { delete WX_LOADING[loc.key]; });
+    return WX_LOADING[loc.key];
+  }
+  const WX_CODE = c => c >= 95 ? ['⛈', '뇌우'] : (c >= 71 && c <= 77) || c === 85 || c === 86 ? ['❄️', '눈'] : c >= 80 ? ['🌦', '소나기']
+    : c >= 61 ? ['🌧', '비'] : c >= 51 ? ['🌦', '이슬비'] : c === 45 || c === 48 ? ['🌫', '안개'] : c === 3 ? ['☁️', '흐림'] : c >= 1 ? ['🌤', '구름 조금'] : ['☀️', '맑음'];
+  // 그 일정 시간대(없으면 9~18시)의 날씨 요약
+  function wxSummary(m, data) {
+    if (!data) return null;
+    const parts = String(m.time || '').split('~').map(s => s.trim());
+    let sh = parseInt(parts[0], 10), eh = parseInt(parts[1], 10);
+    if (isNaN(sh)) { sh = 9; eh = 18; } else if (isNaN(eh) || eh <= sh) eh = sh + 2;
+    const H = data.hourly, idx = [];
+    H.time.forEach((t, i) => { if (t.slice(0, 10) === m.date) { const hr = Number(t.slice(11, 13)); if (hr >= sh && hr < eh) idx.push(i); } });
+    if (!idx.length) return null;
+    const pop = Math.max.apply(null, idx.map(i => H.pop[i] || 0));
+    const mm = idx.reduce((s, i) => s + (H.mm[i] || 0), 0);
+    const temp = Math.round(idx.reduce((s, i) => s + (H.t[i] || 0), 0) / idx.length);
+    const code = Math.max.apply(null, idx.map(i => H.code[i] || 0));
+    return { pop: pop, mm: mm, temp: temp, code: code, rain: pop >= 50 || mm >= 1 };
+  }
+  function wxHtml(w) {
+    const [ico, txt] = WX_CODE(w.code);
+    return `${ico} ${txt} · 강수 ${w.pop}%${w.mm >= 0.5 ? ` (${w.mm.toFixed(1)}mm)` : ''} · ${w.temp}°C${w.rain ? ' · <b>우천 주의</b>' : ''}`;
+  }
+  // 화면에 있는 날씨 칸 채우기 (예보가 있는 16일 안의 일정만)
+  function fillWeather() {
+    document.querySelectorAll('[data-wx]').forEach(el => {
+      const m = allMeetings().find(x => x.id === el.dataset.wx);
+      if (!m) return;
+      const loc = wxLoc(m.place);
+      const paint = d => { const w = wxSummary(m, d); if (!w) { el.style.display = 'none'; return; }
+        el.innerHTML = wxHtml(w); el.classList.toggle('rain', w.rain); el.style.display = ''; };
+      if (WX[loc.key]) paint(WX[loc.key]); else { el.style.display = 'none'; wxFetch(loc).then(paint); }
+    });
+  }
+  const wxSlot = (m, cls) => `<div class="wx ${cls || ''}" data-wx="${esc(m.id)}" style="display:none"></div>`;
 
   // ===== 일정 표시 =====
   // ===== 송금 =====
@@ -548,6 +632,7 @@
       <div class="hero" data-goto="${esc(m.id)}">
         <div class="htop"><span class="hdate">${fmtDate(m.date)}</span><span class="dday">${dday(m.date)}</span></div>
         <div class="hrow">${where}</div>
+        ${wxSlot(m, 'onhero')}
         ${m.memo ? `<div class="hmemo">📝 ${esc(m.memo)}</div>` : ''}
         ${m.status === '정산' && m.count ? `
           <div class="hpay"><span>참석 ${m.count}명 · 1인당 <b>${won(m.per)}원</b></span>
@@ -581,6 +666,7 @@
         <div class="card meet" id="meet-${esc(x.id)}">
           <div class="top"><span class="date">${fmtShort(x.date)}</span>${showDday ? `<span class="dday" style="background:var(--accent2)">${dday(x.date)}</span>` : `<span class="muted">대관료 ${won(x.fee)}원</span>`}</div>
           <div class="muted" style="margin-top:2px">${esc(x.place)}${x.court ? ' · ' + esc(courtTxt(x.court)) : ''}${x.time ? ' · ' + esc(fmtTime(x.time)) : ''}</div>
+          ${showDday ? wxSlot(x) : ''}
           ${x.status === '정산' ? `<div style="margin-top:6px">${payLine(x)}</div>${chipsHtml(x)}` : canVote(x) ? voteHtml(x, false) : '<div class="muted" style="margin-top:6px">참석자 미정</div>'}
         </div>`;
   }
@@ -660,6 +746,7 @@
             <div class="name" style="font-weight:500;color:var(--sub)">${esc(x.name)}</div>${amtHtml(x.balance, x.charged)}
           </div>`).join('') : ''}` : ''}
       </div>
+      <div class="muted" style="text-align:center;font-size:11px;margin-bottom:4px">날씨 정보: <a href="${'https:' + '/' + '/open-meteo.com'}" target="_blank" rel="noopener" style="color:inherit">Open-Meteo</a> (기상청 모델 포함 · CC BY 4.0)</div>
       <div class="muted" style="text-align:center">이름을 누르면 내역이 보여요 · ${esc(DATA.updated)} 기준
         · <button class="linkbtn" id="refresh">새로고침</button></div>
       <div class="muted" style="text-align:center;font-size:11px;margin-top:6px" id="speed">${speedTxt()}</div>`;
