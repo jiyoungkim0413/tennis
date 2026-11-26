@@ -79,6 +79,9 @@
   .hero .hrow b{font-weight:700}
   .hero .ico{width:18px;text-align:center;font-size:13px}
   .sched .row{cursor:default;gap:8px}
+  .sched .row{flex-wrap:wrap}
+  .lunchq.rl{flex-basis:100%;margin-top:2px;font-size:13px}
+  .lunchq.rl .lb{padding:5px 11px;font-size:12.5px}
   .sdate{font-weight:700;min-width:78px}
   .sinfo{flex:1;font-size:14px;color:var(--ink)}
   .sinfo .muted{font-size:12px}
@@ -108,6 +111,19 @@
   .vnames{font-size:14px;margin-top:6px}
   .vnames.dim{opacity:.6}
   .vbtns{display:flex;gap:8px;margin-top:10px}
+  .lunchq{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13.5px;font-weight:600}
+  .lunchq span{flex:1}
+  .lunchq em{font-style:normal;font-weight:500;color:#d9822b;font-size:12px}
+  .lb{padding:7px 12px;border-radius:16px;border:1.5px solid #d9822b;background:#fff;color:#b5651d;font-size:13px;font-weight:700}
+  .lb.no{border-color:#c9cfc8;color:var(--sub)}
+  .lb.on{background:#d9822b;border-color:#d9822b;color:#fff}
+  .lb.no.on{background:#8a918c;border-color:#8a918c;color:#fff}
+  .onhero .lunchq{color:#fff}
+  .onhero .lunchq em{color:#ffd59a}
+  .onhero .lb{background:transparent;border-color:rgba(255,255,255,.85);color:#fff}
+  .onhero .lb.on{background:#fff;border-color:#fff;color:#b5651d}
+  .onhero .lb.no{border-color:rgba(255,255,255,.5);color:rgba(255,255,255,.85)}
+  .onhero .lb.no.on{background:rgba(255,255,255,.3);color:#fff;border-color:#fff}
   .vb{flex:1;padding:11px;border-radius:10px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);font-size:15px;font-weight:700}
   .vb.no{border-color:#c9cfc8;color:var(--sub)}
   .vb.on{background:var(--accent);color:#fff}
@@ -565,6 +581,9 @@
   const comingUp = () => (DATA.upcoming || []).filter(m => !isOver(m));
   const canVote = m => m.status === '예정' && m.date >= (DATA.today || localToday()) && !isOver(m);
 
+  function lunchOf(v) { v.lunch = v.lunch || []; v.nolunch = v.nolunch || []; return v; }
+  const myLunch = v => (lunchOf(v), v.lunch.indexOf(ME) >= 0 ? 'O' : v.nolunch.indexOf(ME) >= 0 ? 'X' : '');
+
   function voteHtml(m, onHero) {
     const v = m.votes || { yes: [], no: [] };
     const active = DATA.members.filter(x => x.active).map(x => x.name);
@@ -576,11 +595,18 @@
         <div class="vhead">참석 투표 <span>참석 <b>${v.yes.length}</b> · 불참 ${v.no.length} · 미응답 ${none.length}</span></div>
         ${v.yes.length ? `<div class="vnames">🙋 ${v.yes.map(esc).join(', ')}</div>` : ''}
         ${v.no.length ? `<div class="vnames dim">🙅 ${v.no.map(esc).join(', ')}</div>` : ''}
+        ${lunchOf(v).lunch.length ? `<div class="vnames">🍚 점심 ${v.lunch.length}명 · ${v.lunch.map(esc).join(', ')}</div>` : ''}
         ${meOk ? `
           <div class="vbtns">
             <button class="vb ${mine === '참석' ? 'on' : ''}" data-vote="${esc(m.id)}" data-c="참석">${mine === '참석' ? '✓ ' : ''}참석</button>
             <button class="vb no ${mine === '불참' ? 'on' : ''}" data-vote="${esc(m.id)}" data-c="불참">${mine === '불참' ? '✓ ' : ''}불참</button>
           </div>
+          ${mine === '참석' ? (() => {
+            const ml = myLunch(v);
+            return `<div class="lunchq"><span>🍚 점심도 같이?${ml ? '' : ' <em>선택해 주세요</em>'}</span>
+              <button class="lb ${ml === 'O' ? 'on' : ''}" data-lunch="${esc(m.id)}" data-l="O">${ml === 'O' ? '✓ ' : ''}먹어요</button>
+              <button class="lb no ${ml === 'X' ? 'on' : ''}" data-lunch="${esc(m.id)}" data-l="X">${ml === 'X' ? '✓ ' : ''}안 먹어요</button></div>`;
+          })() : ''}
           <div class="vme">${esc(ME)}님으로 투표 중 · <button class="linkbtn" data-me="1">이름 바꾸기</button></div>`
         : `<button class="vb wide" data-me="1">내 이름 선택하고 투표하기</button>`}
       </div>`;
@@ -604,6 +630,26 @@
   let voting = false;
   document.addEventListener('click', async e => {
     if (e.target.closest('[data-me]')) { e.stopPropagation(); pickMe(); return; }
+    const lb = e.target.closest('[data-lunch]');
+    if (lb) {
+      e.stopPropagation();
+      if (voting) return;
+      const lm = DATA.upcoming.find(x => x.id === lb.dataset.lunch);
+      if (!lm) return;
+      const lv = lunchOf(lm.votes);
+      const want = lb.dataset.l === 'cycle' ? (myLunch(lv) === 'O' ? 'X' : 'O') : lb.dataset.l;
+      lv.lunch = lv.lunch.filter(n => n !== ME); lv.nolunch = lv.nolunch.filter(n => n !== ME);
+      (want === 'O' ? lv.lunch : lv.nolunch).push(ME);
+      render();
+      voting = true;
+      try {
+        await api('vote', lm.id, ME, '참석', want === 'O');
+        toast(want === 'O' ? '점심도 같이 먹어요 🍚' : '점심은 빠질게요');
+        await load(true);
+      } catch (err) { toast(errMsg(err)); await load(true); }
+      finally { voting = false; }
+      return;
+    }
     const b = e.target.closest('[data-vote]');
     if (!b || voting) return;
     e.stopPropagation();
@@ -615,11 +661,12 @@
     // 화면 먼저 바꾸고 서버 저장
     v.yes = v.yes.filter(n => n !== ME); v.no = v.no.filter(n => n !== ME);
     if (choice === '참석') v.yes.push(ME); else if (choice === '불참') v.no.push(ME);
+    if (choice !== '참석') { lunchOf(v); v.lunch = v.lunch.filter(n => n !== ME); v.nolunch = v.nolunch.filter(n => n !== ME); }
     render();
     voting = true;
     try {
       await api('vote', mid, ME, choice);
-      toast(choice ? `${choice}으로 투표했어요` : '투표를 취소했어요');
+      toast(choice === '참석' ? '참석! 점심 여부도 골라 주세요 🍚' : choice ? `${choice}으로 투표했어요` : '투표를 취소했어요');
       await load(true);
     } catch (err) { toast(errMsg(err)); await load(true); }
     finally { voting = false; }
@@ -680,7 +727,10 @@
     const mine = v.yes.indexOf(ME) >= 0 ? '참석' : v.no.indexOf(ME) >= 0 ? '불참' : '';
     return `<div class="rvote">${cnt}
       <button class="rvb ${mine === '참석' ? 'on' : ''}" data-vote="${esc(m.id)}" data-c="참석">${mine === '참석' ? '✓ ' : ''}참석</button>
-      <button class="rvb no ${mine === '불참' ? 'on' : ''}" data-vote="${esc(m.id)}" data-c="불참">${mine === '불참' ? '✓ ' : ''}불참</button></div>`;
+      <button class="rvb no ${mine === '불참' ? 'on' : ''}" data-vote="${esc(m.id)}" data-c="불참">${mine === '불참' ? '✓ ' : ''}불참</button>
+      </div>${mine === '참석' ? (() => { const ml = myLunch(v); return `<div class="lunchq rl"><span>🍚 점심도 같이?${ml ? '' : ' <em>선택해 주세요</em>'}${v.lunch.length ? ` <small class="muted">(${v.lunch.length}명)</small>` : ''}</span>
+        <button class="lb ${ml === 'O' ? 'on' : ''}" data-lunch="${esc(m.id)}" data-l="O">${ml === 'O' ? '✓ ' : ''}먹어요</button>
+        <button class="lb no ${ml === 'X' ? 'on' : ''}" data-lunch="${esc(m.id)}" data-l="X">${ml === 'X' ? '✓ ' : ''}안 먹어요</button></div>`; })() : ''}`;
   }
 
   function schedRow(m, extra, gotoId) {
@@ -964,7 +1014,7 @@
                 `<button class="mini g" data-editinfo="${esc(m.id)}">수정</button><button class="mini g" data-edit="${esc(m.id)}">참석자 지정</button>` : `<button class="mini g" data-edit="${esc(m.id)}">수정</button>`}
               <button class="mini" data-delmeet="${esc(m.id)}">삭제</button></div>`) +
               (m.status === '정산' ? `<div class="subchips">${chipsHtml(m)}</div>`
-                : `<div class="subchips muted">투표 참석 ${m.votes.yes.length}${m.votes.yes.length ? ' (' + m.votes.yes.map(esc).join(', ') + ')' : ''} · 불참 ${m.votes.no.length}</div>`)).join('') : '<div class="muted">일정이 없어요.</div>';
+                : `<div class="subchips muted">투표 참석 ${m.votes.yes.length}${m.votes.yes.length ? ' (' + m.votes.yes.map(esc).join(', ') + ')' : ''} · 불참 ${m.votes.no.length}${(m.votes.lunch || []).length ? ' · 🍚 점심 ' + m.votes.lunch.length + ' (' + m.votes.lunch.map(esc).join(', ') + ')' : ''}</div>`)).join('') : '<div class="muted">일정이 없어요.</div>';
           })()}
         </div>
       </div>
